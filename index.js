@@ -1,12 +1,51 @@
-const http = require('http');
-const PORT = 3000;
+const express = require("express");
+const cors = require("cors");
+const mongoose = require("mongoose");
+const authRoutes = require("./routes/auth");
+const messageRoutes = require("./routes/messages");
+const app = express();
+const socket = require("socket.io");
+require("dotenv").config();
+app.use(cors());
+app.use(express.json());
 
-const server = http.createServer((req, res) => {
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/plain');
-  res.end('Hello World!');
+mongoose
+  .connect(process.env.MONGO_URL, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => {
+    console.log("DB Connetion Successfull");
+  })
+  .catch((err) => {
+    console.log(err.message);
+  });
+
+app.use("/api/auth", authRoutes);
+app.use("/api/messages", messageRoutes);
+
+const server = app.listen(process.env.PORT, () =>
+  console.log(`Server started on ${process.env.PORT}`)
+);
+const io = socket(server, {
+  cors: {
+    origin: "http://localhost:3000",
+    credentials: true,
+  },
 });
+// Created a socket with origin at localhost 3000
 
-server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}/`);
+global.onlineUsers = new Map();
+io.on("connection", (socket) => {
+  global.chatSocket = socket;
+  socket.on("add-user", (userId) => {
+    onlineUsers.set(userId, socket.id);
+  });
+
+  socket.on("send-msg", (data) => {
+    const sendUserSocket = onlineUsers.get(data.to);
+    if (sendUserSocket) {
+      socket.to(sendUserSocket).emit("msg-recieve", data.msg);
+    }
+  });
 });
